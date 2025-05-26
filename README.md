@@ -1,10 +1,3 @@
-=(SVI328_Senhor notes)=-
-
-Tested: Working Video 720p, 1080p & Sound
-
-Dev notes: Clocks swapped - LEDs disabled
-
-___
 # Spectravideo SV-328 
 
 Core by fpganoob on misterfpga.org
