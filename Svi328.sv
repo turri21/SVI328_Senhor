@@ -40,7 +40,7 @@
 //AY - 1,789772
 
 //`define Bram
-
+`default_nettype none
 
 module emu
 (
@@ -235,10 +235,11 @@ video_freak video_freak
 parameter CONF_STR = {
 	"SVI328;;",
 	"-;",
-	"F1,BINROM,Load Cartridge;",
-	"OF,Tape Input,File,ADC;",
+	"F,BINROM,Load Cartridge;",
+//	"OF,Tape Input,File,ADC;",   //ADC is not supported on Senhor
 	"D0F2,CAS,Cas File;",
 	"D0TD,Tape Rewind;",
+	"O4,Tape Audio,On,Off;",
 	"-;",
 	"O12,Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
 	"O79,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%;",
@@ -248,9 +249,10 @@ parameter CONF_STR = {
 	"-;",
 	"O3,Joysticks swap,No,Yes;",
 	"R0,Reset;",
+	"R5,Hard reset;",
         "J,Button;",
         "jn,A;",
-	"V,v",`BUILD_DATE
+	"V,Senhor-",`BUILD_DATE
 };
 
 /////////////////  CLOCKS  ////////////////////////
@@ -269,14 +271,35 @@ pll pll
 reg ce_10m7 = 0;
 reg ce_5m3 = 0;
 reg ce_21m3 = 0;
+//always @(posedge clk_sys) begin
+//	reg [2:0] div;
+//	
+//	div <= div+1'd1;
+////	ce_10m7 <= !div[1:0];
+////	ce_5m3  <= !div[2:0];
+//	ce_21m3 <= div[0];
+//end
+
+///////////////  Megarom  /////////////////////////
+
+reg megarom;
+reg [5:0] megarom_index;
+
 always @(posedge clk_sys) begin
-	reg [2:0] div;
-	
-	div <= div+1'd1;
-	ce_10m7 <= !div[1:0];
-	ce_5m3  <= !div[2:0];
-	ce_21m3 <= div[0];
+    reg [2:0] div;
+    reg [19:0] megarom_cnt;
+    div <= div + 1'd1;
+    ce_10m7 <= !div[1:0];
+    ce_5m3  <= !div[2:0];
+	 ce_21m3 <= div[0];
+    if (!div[2:0]) begin
+        if (megarom_cnt == 20'd666666) begin
+            megarom_cnt <= 20'd0;
+            megarom_index <= megarom_index + 6'd1;
+        end else megarom_cnt <= megarom_cnt + 20'd1;
+    end
 end
+
 
 /////////////////  HPS  ///////////////////////////
 
@@ -294,6 +317,9 @@ wire  [7:0] ioctl_dout;
 wire        forced_scandoubler;
 wire [21:0] gamma_bus;
 wire [10:0] PS2Keys;
+
+reg [15:0] cleanup_addr = 16'd0;
+reg cleanup_we;
  
 hps_io #(.CONF_STR(CONF_STR)) hps_io
 (
@@ -312,7 +338,7 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 	.ioctl_dout(ioctl_dout),
 	.ioctl_wait(ioctl_wait),
 
-	.status_menumask({status[15]}),	
+//	.status_menumask({status[15]}),	
 	
 	.ps2_key(PS2Keys),
 	
@@ -323,7 +349,43 @@ hps_io #(.CONF_STR(CONF_STR)) hps_io
 
 /////////////////  RESET  /////////////////////////
 
-wire reset = RESET | status[0] | buttons[1] | (ioctl_download && ioctl_isROM);
+wire reset = RESET | status[0] | buttons[1] | (ioctl_download && ioctl_isROM) | in_hard_reset;
+wire hard_reset = status[5];
+wire in_hard_reset = |cleanup_addr;
+
+///////////////////////////////////////////////////
+
+always @(posedge clk_sys) begin
+    reg hard_reset_last;
+    reg ce_last;
+    
+    hard_reset_last <= hard_reset;
+    ce_last <= ce_5m3;
+    if (~hard_reset_last & hard_reset) begin
+        cleanup_addr <= 16'hffff;
+        cleanup_we <= 1'b1;
+        megarom <= 1'b0;
+//        tape_loaded <= 1'b0;
+    end
+    else begin
+        if (~ce_last & ce_5m3) begin
+            if (|cleanup_addr) begin
+                case (cleanup_we) 
+                    1'b0: cleanup_we <= 1'b1;
+                    1'b1: begin
+                        cleanup_we <= 1'b0;
+                        cleanup_addr <= cleanup_addr - 1'b1;
+                    end
+                endcase
+            end
+        end
+        if (ioctl_index[1:0] == 2'b01 && ioctl_download == 1'b1) begin
+            megarom <= |ioctl_addr[19:16];
+        end
+//        if (ioctl_index[1:0] == 2'b10 && ioctl_download == 1'b1) tape_loaded <= 1'b1;
+//        else if (reset == 1'b1) tape_loaded <= 1'b0;
+    end
+end
 
 ////////////////  KeyBoard  ///////////////////////
 
@@ -378,30 +440,60 @@ assign sdram_rdy = 1'b1;
 `else 
 
 wire sdram_we,sdram_rd;
-wire [17:0] sdram_addr;
+wire [22:0] sdram_addr;
 wire  [7:0] sdram_din;
 wire ioctl_isROM = (ioctl_index[5:0]<6'd2); //Index osd File is 0 (ROM) or 1(Rom Cartridge)
 
 
-assign sdram_we = (ioctl_wr && ioctl_isROM) | ( isRam & ~(ram_we_n | ram_ce_n));
-assign sdram_addr = (ioctl_download && ioctl_isROM) ? {ioctl_index[0],ioctl_addr[15:0]} : ram_a;
-assign sdram_din = (ioctl_wr && ioctl_isROM) ? ioctl_dout : ram_do;
+assign sdram_we = (ioctl_wr && ioctl_isROM) | ( isRam & ~(ram_we_n | ram_ce_n)) | (in_hard_reset & cleanup_we);
+//assign sdram_addr = (ioctl_download && ioctl_isROM) ? {ioctl_index[0],ioctl_addr[15:0]} : ram_a;
+assign sdram_din = (ioctl_wr && ioctl_isROM) ? ioctl_dout : in_hard_reset ? 8'h00 : ram_do;
+
+wire [8:0] megarom_page = megarom ? 
+    megarom_index < 6'd4 ? {6'd0, 1'b1, megarom_index[1:0]} : {3'b100, megarom_index[5:0]} 
+    : {6'd0, 1'b1, ram_a[15:14]};
+
+//assign sdram_we = ioctl_wr | 
+//                  (isRam & ~(ram_we_n | ram_ce_n)) | 
+//                  (in_hard_reset & cleanup_we);
+
+assign sdram_addr = 
+        (ioctl_download && ioctl_isROM && ~|ioctl_addr[24:16]) ? {6'd0, ioctl_index[0], ioctl_addr[15:0]} : //ioctl: ROM and Cartridge (64K)
+        (ioctl_download && ioctl_isROM && |ioctl_addr[24:16]) ? {3'b100,  ioctl_addr[19:0]} :               //ioctl: Cartridge (> 64K)
+//        ioctl_cas_download ? {2'b11, ioctl_addr[20:0]} :                                                    //ioctl: Cassette
+        in_hard_reset ? {1'b1, cleanup_addr} :                                                              //Hard reset
+//        sdram_cas_rd ? {2'b11, sdram_cas_addr[20:0]} :                                                      //Cassette: Play
+        ram_a[17:16] == 2'b01 ? {megarom_page, ram_a[13:0]} : ram_a;                                        //CPU&Mapper accesses
+
+//assign sdram_din = ioctl_wr ? ioctl_dout : 
+//    in_hard_reset ? 8'h00 :
+//    ram_do;
 
 assign sdram_rd = ~(ram_rd_n | ram_ce_n);
 assign SDRAM_CLK = ~clk_sys;
-sdram sdram
-(
-	.*,
-	.init(~pll_locked),
-	.clk(clk_sys),
+sdram sdram(
+    .SDRAM_DQ(SDRAM_DQ),
+    .SDRAM_A(SDRAM_A),
+    .SDRAM_DQML(SDRAM_DQML),
+    .SDRAM_DQMH(SDRAM_DQMH),
+    .SDRAM_BA(SDRAM_BA),
+    .SDRAM_nCS(SDRAM_nCS),
+    .SDRAM_nWE(SDRAM_nWE),
+    .SDRAM_nRAS(SDRAM_nRAS),
+    .SDRAM_nCAS(SDRAM_nCAS),
+    .SDRAM_CKE(SDRAM_CKE),
+    
+    .init(~pll_locked),
+    .clk(clk_sys),
 
-   .wtbt(0),
-   .addr(sdram_addr), 
-   .rd(sdram_rd),
-   .dout(ram_di),
-   .din(sdram_din),
-   .we(sdram_we), 
-   .ready(sdram_rdy)
+    .wtbt(0),
+    .addr(sdram_addr), 
+    .rd(sdram_rd),
+    .we(sdram_we),
+    .din(sdram_din),
+    .dout(ram_di),
+    
+    .ready(sdram_rdy)
 );
 `endif
 
@@ -422,7 +514,14 @@ svi_mapper RamMapper
 
 ////////////////  Console  ////////////////////////
 
-wire [10:0] audio;
+wire [10:0] core_audio;
+//wire [10:0] audio;
+//wire svi_audio_in = status[15] ? tape_in : (CAS_status != 0 ? CAS_dout : 1'b0);
+wire svi_audio_in = (CAS_status != 0 ? CAS_dout : 1'b0);
+
+// Select audio source based on cassette status
+wire [10:0] audio = (CAS_status != 0 && !status[4]) ? {svi_audio_in, 10'b0000000000} : core_audio;
+
 assign AUDIO_L = {audio,5'd0};
 assign AUDIO_R = {audio,5'd0};
 assign AUDIO_S = 0;
@@ -433,12 +532,11 @@ assign CLK_VIDEO = clk_sys;
 wire [7:0] R,G,B,ay_port_b;
 wire hblank, vblank;
 wire hsync, vsync;
+wire cpu_rfsh_n;
 
 wire [31:0] joya = status[3] ? joy1 : joy0;
 wire [31:0] joyb = status[3] ? joy0 : joy1;
 
-
-wire svi_audio_in = status[15] ? tape_in : (CAS_status != 0 ? CAS_dout : 1'b0);
 
 cv_console console
 (
@@ -463,6 +561,7 @@ cv_console console
 	.cpu_ram_rd_n_o(ram_rd_n),
 	.cpu_ram_d_i(ram_di),
 	.cpu_ram_d_o(ram_do),
+   .cpu_rfsh_n_o(cpu_rfsh_n),
 
 	.ay_port_b(ay_port_b),
 	
@@ -482,7 +581,7 @@ cv_console console
 	.hcount_o(HCount),
 	.vcount_o(VCount),
 
-	.audio_o(audio)
+	.audio_o(core_audio)
 );
 
 
