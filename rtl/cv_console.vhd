@@ -77,8 +77,8 @@ entity cv_console is
     svi_row_o       : out std_logic_vector(3 downto 0);
     svi_col_i       : in  std_logic_vector(7 downto 0);	 
 
-    svi_tap_i	    : in  std_logic;	 
-    motor_o	    : out std_logic;	 
+	 svi_tap_i	     : in  std_logic;	 
+    motor_o			  : out std_logic;	 
 	 
     por_n_o         : out std_logic;
     -- Controller Interface ---------------------------------------------------
@@ -91,8 +91,9 @@ entity cv_console is
     cpu_ram_we_n_o  : out std_logic;
     cpu_ram_d_i     : in  std_logic_vector( 7 downto 0);
     cpu_ram_d_o     : out std_logic_vector( 7 downto 0);
+    cpu_rfsh_n_o    : out std_logic;
     -- RAM Mapper Reg ---------------------------------------------------------
-    ay_port_b       : out std_logic_vector( 7 downto 0);
+	 ay_port_b		  : out std_logic_vector( 7 downto 0);
     -- Video RAM Interface ----------------------------------------------------
     vram_a_o        : out std_logic_vector(13 downto 0);
     vram_we_o       : out std_logic;
@@ -110,9 +111,9 @@ entity cv_console is
     hblank_o        : out std_logic;
     vblank_o        : out std_logic;
     comp_sync_n_o   : out std_logic;
-    hcount_o        : out std_logic_vector(8 downto 0);
+	 hcount_o        : out std_logic_vector(8 downto 0);
     vcount_o        : out std_logic_vector(8 downto 0);
-
+	 
     -- Audio Interface --------------------------------------------------------
     audio_o         : out std_logic_vector(10 downto 0)
   );
@@ -246,6 +247,7 @@ architecture struct of cv_console is
   
 begin
 
+  cpu_rfsh_n_o <= rfsh_n_s;
   vdd_s <= '1';
   audio_o <=  (keyBeep & ((PortC_8255(6) and svi_tap_i) or PortC_8255(5)) & "000000000") or AySound & "0";
   motor_o <= motor;
@@ -460,7 +462,7 @@ inst_psg : jt49_bus
       border_i      => border_i,
       hblank_o      => hblank_o,
       vblank_o      => vblank_o,
-      hcount_o      => hcount_o,
+		hcount_o      => hcount_o,
       vcount_o      => vcount_o,
       comp_sync_n_o => comp_sync_n_o
     );
