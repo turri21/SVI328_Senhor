@@ -2,7 +2,7 @@
 
 Tested: Working Video 720p, 1080p & sound.
 
-Senhor additions: MegaROM support, Hardware reset and OSD option tape sound On/Off.
+Senhor additions: MegaROM support [teiram](https://github.com/teiram), Hardware reset and OSD option tape sound On/Off.
 ___
 # Spectravideo SV-328 
 
