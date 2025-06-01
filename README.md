@@ -2,7 +2,7 @@
 
 Tested: Working Video 720p, 1080p & sound.
 
-Senhor additions: MegaROM support, Hardware reset and OSD option tape sound On/Off.
+Senhor additions: MegaROM support, Hardware reset and OSD option for tape sound On/Off.
 
 MegaROM contributors: [teiram](https://github.com/teiram), [retrocrypta](https://github.com/retrocrypta)
 ___
