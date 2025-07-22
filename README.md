@@ -7,6 +7,8 @@ Senhor additions: MegaROM support, Hardware reset and OSD option for tape sound 
 MegaROM contributors: [teiram](https://github.com/teiram), [retrocrypta](https://github.com/retrocrypta)
 
 ADC input does not exist on Senhor, therefore it's not supported.
+
+Dev notes: Clocks swapped in sys.tcl
 ___
 # Spectravideo SV-328 
 
