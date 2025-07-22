@@ -8,7 +8,6 @@ MegaROM contributors: [teiram](https://github.com/teiram), [retrocrypta](https:/
 
 ADC input does not exist on Senhor, therefore it's not supported.
 
-Dev notes: Clocks swapped in sys.tcl
 ___
 # Spectravideo SV-328 
 
