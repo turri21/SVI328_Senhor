@@ -240,7 +240,7 @@ parameter CONF_STR = {
 //	"OF,Tape Input,File,ADC;",   //ADC is not supported on Senhor
 	"D0F2,CAS,Cas File;",
 	"D0TD,Tape Rewind;",
-	"O4,Tape Audio,On,Off;",
+	"O4,Tape Audio,Off,On;",
 	"-;",
 	"O12,Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
 	"O79,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%;",
@@ -366,7 +366,6 @@ always @(posedge clk_sys) begin
         cleanup_addr <= 16'hffff;
         cleanup_we <= 1'b1;
         megarom <= 1'b0;
-//        tape_loaded <= 1'b0;
     end
     else begin
         if (~ce_last & ce_5m3) begin
@@ -521,7 +520,7 @@ wire [10:0] core_audio;
 wire svi_audio_in = (CAS_status != 0 ? CAS_dout : 1'b0);
 
 // Select audio source based on cassette status
-wire [10:0] audio = (CAS_status != 0 && !status[4]) ? {svi_audio_in, 10'b0000000000} : core_audio;
+wire [10:0] audio = (CAS_status != 0 && status[4]) ? {svi_audio_in, 10'b0000000000} : core_audio;
 
 assign AUDIO_L = {audio,5'd0};
 assign AUDIO_R = {audio,5'd0};
@@ -678,8 +677,9 @@ spram #(18) CAS_ram
 
 
 assign play = ~motor;
-assign rewind = status[13] | (ioctl_download && ioctl_isCAS) | reset; //status[13];
-
+assign rewind = status[13] | (ioctl_download && ioctl_isCAS) | reset; 
+//assign rewind = status[13] | (ioctl_download && ioctl_isCAS) | (ioctl_download && ioctl_isROM) | reset;
+ 
 cassette CASReader(
 
   .clk(clk_sys), 
